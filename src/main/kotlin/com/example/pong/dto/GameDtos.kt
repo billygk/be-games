@@ -1,0 +1,54 @@
+package com.example.pong.dto
+
+import com.fasterxml.jackson.annotation.JsonTypeInfo
+import com.fasterxml.jackson.annotation.JsonTypeName
+import com.fasterxml.jackson.databind.JsonNode
+
+// Incoming Message Models
+
+/**
+ * A generic wrapper for all incoming messages from the client.
+ * The 'type' field is used to determine how to deserialize the 'payload'.
+ */
+data class IncomingMessage(val type: String, val payload: JsonNode)
+
+/**
+ * DTO for player movement updates.
+ */
+data class PlayerMove(val y: Double)
+
+
+// Outgoing Message Models
+
+/**
+ * A sealed interface for all messages sent from the server to the client.
+ * This allows for exhaustive 'when' statements and clear modeling of server responses.
+ */
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
+sealed interface ServerMessage
+
+/**
+ * Informs a client which player they are (player1 or player2).
+ * Serializes to: {"type": "player-assignment", "player": "player1"}
+ */
+@JsonTypeName("player-assignment")
+data class PlayerAssignment(val player: String) : ServerMessage
+
+/**
+ * Represents a full snapshot of the game state, broadcast to all clients on every tick.
+ * Serializes to: {"type": "game-state", "ball": {...}, "player1": {...}, ...}
+ */
+@JsonTypeName("game-state")
+data class GameStateUpdate(
+    val ball: Ball,
+    val player1: Paddle,
+    val player2: Paddle,
+    val score: Score
+) : ServerMessage
+
+
+// Component Models for GameStateUpdate
+
+data class Ball(var x: Double, var y: Double)
+data class Paddle(var y: Double)
+data class Score(var player1: Int, var player2: Int)
