@@ -2,6 +2,7 @@ package com.example.pong.service
 
 import com.example.pong.dto.*
 import com.fasterxml.jackson.databind.ObjectMapper
+import org.slf4j.LoggerFactory
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
 import org.springframework.web.socket.TextMessage
@@ -14,6 +15,8 @@ import kotlin.random.Random
 
 @Service
 class GameService(private val objectMapper: ObjectMapper) {
+
+    private val logger = LoggerFactory.getLogger(GameService::class.java)
 
     // Game Constants
     companion object {
@@ -35,6 +38,7 @@ class GameService(private val objectMapper: ObjectMapper) {
     )
     private var ballVelocityX = 5.0
     private var ballVelocityY = 5.0
+    private var gameRunning = false
 
     // Player Management
     @Synchronized
@@ -46,18 +50,20 @@ class GameService(private val objectMapper: ObjectMapper) {
         }
 
         if (playerKey != null) {
+            logger.info("Assigning session ${session.id} to $playerKey")
             players[playerKey] = session
             sendMessage(session, PlayerAssignment(player = playerKey))
             if (players.size == 2) {
+                logger.info("Both players connected. Starting game.")
+                gameRunning = true
                 resetGame()
             }
         } else {
-            // Optionally send a "game full" message and close connection
-            println("Game is full. Connection rejected for session: ${session.id}")
+            logger.warn("Game is full. Rejecting connection for session: ${session.id}")
             try {
                 session.close()
             } catch (e: IOException) {
-                println("Error closing session: ${e.message}")
+                logger.error("Error closing session ${session.id} after rejection: ${e.message}", e)
             }
         }
     }
@@ -67,9 +73,13 @@ class GameService(private val objectMapper: ObjectMapper) {
         val playerKey = getPlayerKey(session)
         if (playerKey != null) {
             players.remove(playerKey)
-            println("Player $playerKey disconnected.")
-            // Reset the game if a player leaves
+            logger.info("Player $playerKey (session ${session.id}) disconnected.")
+            // Stop and reset the game if a player leaves
+            gameRunning = false
             resetGame()
+            logger.info("Game stopped and reset due to player disconnection.")
+        } else {
+            logger.warn("Attempted to remove a non-existent player for session ${session.id}")
         }
     }
 
@@ -81,14 +91,16 @@ class GameService(private val objectMapper: ObjectMapper) {
     fun updatePlayerPosition(playerKey: String, y: Double) {
         val paddle = if (playerKey == "player1") gameState.player1 else gameState.player2
         // Clamp paddle position to be within game bounds
-        paddle.y = y.coerceIn(0.0, GAME_HEIGHT - PADDLE_HEIGHT)
+        val clampedY = y.coerceIn(0.0, GAME_HEIGHT - PADDLE_HEIGHT)
+        paddle.y = clampedY
+        logger.debug("Updated $playerKey paddle position to y=$clampedY")
     }
 
     // Game Loop - runs at ~60 FPS
     @Scheduled(fixedRate = 16)
     fun gameLoop() {
-        if (players.size < 2) {
-            // Don't run the game loop if not enough players are connected.
+        if (!gameRunning) {
+            // Don't run the game loop if not enough players are connected or game is paused.
             return
         }
 
@@ -104,6 +116,7 @@ class GameService(private val objectMapper: ObjectMapper) {
         // Wall collision (top/bottom)
         if (gameState.ball.y <= 0 || gameState.ball.y >= GAME_HEIGHT - BALL_SIZE) {
             ballVelocityY *= -1
+            logger.debug("Ball collided with top/bottom wall.")
         }
 
         // Paddle collision
@@ -115,21 +128,25 @@ class GameService(private val objectMapper: ObjectMapper) {
         if (ball.x <= PADDLE_WIDTH && ball.y + BALL_SIZE >= p1.y && ball.y <= p1.y + PADDLE_HEIGHT) {
             ball.x = PADDLE_WIDTH // prevent ball from getting stuck in paddle
             ballVelocityX *= -1.05 // Invert and increase speed
+            logger.debug("Ball collided with player 1 paddle.")
         }
 
         // Player 2 paddle collision
         if (ball.x >= GAME_WIDTH - PADDLE_WIDTH - BALL_SIZE && ball.y + BALL_SIZE >= p2.y && ball.y <= p2.y + PADDLE_HEIGHT) {
             ball.x = GAME_WIDTH - PADDLE_WIDTH - BALL_SIZE // prevent ball from getting stuck
             ballVelocityX *= -1.05 // Invert and increase speed
+            logger.debug("Ball collided with player 2 paddle.")
         }
 
 
         // Score detection
         if (ball.x <= 0) {
             gameState.score.player2++
+            logger.info("Player 2 scored! Score is now ${gameState.score.player1} - ${gameState.score.player2}")
             resetBall()
         } else if (ball.x >= GAME_WIDTH) {
             gameState.score.player1++
+            logger.info("Player 1 scored! Score is now ${gameState.score.player1} - ${gameState.score.player2}")
             resetBall()
         }
     }
@@ -146,11 +163,12 @@ class GameService(private val objectMapper: ObjectMapper) {
         }
         ballVelocityX = 5.0 * cos(angle)
         ballVelocityY = 5.0 * sin(angle)
+        logger.info("Ball reset to center with new velocity.")
     }
 
     @Synchronized
     private fun resetGame() {
-        println("Resetting game state.")
+        logger.info("Resetting game state. Score: 0-0.")
         gameState.score.player1 = 0
         gameState.score.player2 = 0
         gameState.player1.y = GAME_HEIGHT / 2 - PADDLE_HEIGHT / 2
@@ -171,6 +189,7 @@ class GameService(private val objectMapper: ObjectMapper) {
 
     private fun broadcast(message: ServerMessage) {
         val jsonMessage = objectMapper.writeValueAsString(message)
+        logger.trace("Broadcasting game state: {}", jsonMessage)
         players.values.forEach { session ->
             sendMessage(session, jsonMessage)
         }
@@ -184,9 +203,12 @@ class GameService(private val objectMapper: ObjectMapper) {
         try {
             if (session.isOpen) {
                 session.sendMessage(TextMessage(message))
+            } else {
+                logger.warn("Attempted to send message to closed session ${session.id}")
             }
         } catch (e: IOException) {
-            println("Error sending message to session ${session.id}: ${e.message}")
+            logger.error("Error sending message to session ${session.id}: ${e.message}", e)
+            // The connection is likely broken, so we should remove the player.
             removePlayer(session)
         }
     }

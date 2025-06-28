@@ -1,0 +1,7 @@
+spring.application.name: pong
+# Set the root logging level to INFO
+logging.level.root: INFO
+# Set the logging level for our Pong application packages to DEBUG
+logging.level.com.example.pong: DEBUG
+# For extremely detailed logging (like ball position per frame), you can use TRACE
+# logging.level.com.example.pong.service=TRACE
