@@ -25,7 +25,7 @@ class GameService(private val objectMapper: ObjectMapper) {
         const val PADDLE_WIDTH = 10.0
         const val PADDLE_HEIGHT = 100.0
         const val BALL_SIZE = 10.0
-        const val PADDLE_SPEED = 6.0 // Not used on backend, but good to have
+        const val PADDLE_SPEED = 15.0
     }
 
     // Thread-safe state management
@@ -52,7 +52,19 @@ class GameService(private val objectMapper: ObjectMapper) {
         if (playerKey != null) {
             logger.info("Assigning session ${session.id} to $playerKey")
             players[playerKey] = session
-            sendMessage(session, PlayerAssignment(player = playerKey))
+
+            // Construct the settings payload
+            val settings = GameSettings(
+                paddleSpeed = PADDLE_SPEED,
+                gameWidth = GAME_WIDTH,
+                gameHeight = GAME_HEIGHT,
+                paddleHeight = PADDLE_HEIGHT,
+                paddleWidth = PADDLE_WIDTH,
+                ballSize = BALL_SIZE
+            )
+            // Send the extended assignment message
+            sendMessage(session, PlayerAssignment(player = playerKey, settings = settings))
+
             if (players.size == 2) {
                 logger.info("Both players connected. Starting game.")
                 gameRunning = true
@@ -128,14 +140,14 @@ class GameService(private val objectMapper: ObjectMapper) {
         if (ball.x <= PADDLE_WIDTH && ball.y + BALL_SIZE >= p1.y && ball.y <= p1.y + PADDLE_HEIGHT) {
             ball.x = PADDLE_WIDTH // prevent ball from getting stuck in paddle
             ballVelocityX *= -1.05 // Invert and increase speed
-            logger.debug("Ball collided with player 1 paddle.")
+            logger.debug("-- Ball collided with player 1 paddle.")
         }
 
         // Player 2 paddle collision
         if (ball.x >= GAME_WIDTH - PADDLE_WIDTH - BALL_SIZE && ball.y + BALL_SIZE >= p2.y && ball.y <= p2.y + PADDLE_HEIGHT) {
             ball.x = GAME_WIDTH - PADDLE_WIDTH - BALL_SIZE // prevent ball from getting stuck
             ballVelocityX *= -1.05 // Invert and increase speed
-            logger.debug("Ball collided with player 2 paddle.")
+            logger.debug("-- Ball collided with player 2 paddle.")
         }
 
 

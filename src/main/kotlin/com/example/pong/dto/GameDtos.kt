@@ -27,12 +27,16 @@ data class PlayerMove(val y: Double)
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "type")
 sealed interface ServerMessage
 
+
 /**
- * Informs a client which player they are (player1 or player2).
- * Serializes to: {"type": "player-assignment", "player": "player1"}
+ * Informs a client which player they are (player1 or player2) and provides initial game settings.
+ * Serializes to: {"type": "player-assignment", "player": "player1", "settings": {...}}
  */
 @JsonTypeName("player-assignment")
-data class PlayerAssignment(val player: String) : ServerMessage
+data class PlayerAssignment(
+    val player: String,
+    val settings: GameSettings
+) : ServerMessage
 
 /**
  * Represents a full snapshot of the game state, broadcast to all clients on every tick.
@@ -48,6 +52,18 @@ data class GameStateUpdate(
 
 
 // Component Models for GameStateUpdate
+
+/**
+ * Contains initial game constants for the client, controlled by the server.
+ */
+data class GameSettings(
+    val paddleSpeed: Double,
+    val gameWidth: Double,
+    val gameHeight: Double,
+    val paddleHeight: Double,
+    val paddleWidth: Double,
+    val ballSize: Double
+)
 
 data class Ball(var x: Double, var y: Double)
 data class Paddle(var y: Double)
