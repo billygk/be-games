@@ -40,7 +40,8 @@ class PongWebSocketHandler(
                 else -> logger.warn("Received unknown message type '${incomingMessage.type}' from session ${session.id}")
             }
         } catch (e: Exception) {
-            logger.error("Error handling message from session ${session.id}: ${e.message}", e)        }
+            logger.error("Error handling message from session ${session.id}: ${e.message}", e)
+        }
     }
 
     override fun afterConnectionClosed(session: WebSocketSession, status: CloseStatus) {
