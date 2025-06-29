@@ -22,9 +22,9 @@ class GameService(private val objectMapper: ObjectMapper) {
     companion object {
         const val GAME_WIDTH = 800.0
         const val GAME_HEIGHT = 600.0
-        const val PADDLE_WIDTH = 10.0
+        const val PADDLE_WIDTH = 20.0
         const val PADDLE_HEIGHT = 100.0
-        const val BALL_SIZE = 10.0
+        const val BALL_SIZE = 20.0
         const val PADDLE_SPEED = 15.0
     }
 
