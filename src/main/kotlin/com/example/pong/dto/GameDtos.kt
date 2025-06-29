@@ -62,7 +62,8 @@ data class GameSettings(
     val gameHeight: Double,
     val paddleHeight: Double,
     val paddleWidth: Double,
-    val ballSize: Double
+    val ballSize: Double,
+    val ballSpeed: Double
 )
 
 data class Ball(var x: Double, var y: Double)

@@ -20,12 +20,13 @@ class GameService(private val objectMapper: ObjectMapper) {
 
     // Construct the settings payload
     val settings = GameSettings(
-        paddleSpeed = 15.0,
+        paddleSpeed = 5.0,
         gameWidth = 800.0,
         gameHeight = 600.0,
-        paddleHeight = 200.0,
+        paddleHeight = 100.0,
         paddleWidth = 15.0,
-        ballSize = 10.0
+        ballSize = 10.0,
+        ballSpeed = 1.05
     )
     // Thread-safe state management
     private val players = ConcurrentHashMap<String, WebSocketSession>()
@@ -35,8 +36,8 @@ class GameService(private val objectMapper: ObjectMapper) {
         player2 = Paddle(settings.gameHeight / 2 - settings.paddleHeight / 2),
         score = Score(0, 0)
     )
-    private var ballVelocityX = 5.0
-    private var ballVelocityY = 5.0
+    private var ballVelocityX = 2.0
+    private var ballVelocityY = 2.0
     private var gameRunning = false
 
     // Player Management
@@ -126,18 +127,33 @@ class GameService(private val objectMapper: ObjectMapper) {
         val p1 = gameState.player1
         val p2 = gameState.player2
 
-        // Player 1 paddle collision
-        if (ball.x <= settings.paddleWidth && ball.y + settings.ballSize >= p1.y && ball.y <= p1.y + settings.paddleHeight) {
-            ball.x = settings.paddleWidth // prevent ball from getting stuck in paddle
-            ballVelocityX *= -1.05 // Invert and increase speed
+        // Check for collision with Player 1 (left paddle)
+        // A collision occurs if the ball is moving left, its left edge has crossed
+        // the paddle's right edge, and it vertically aligns with the paddle.
+        if (ballVelocityX < 0 &&
+            ball.x <= settings.paddleWidth &&
+            ball.y + settings.ballSize >= p1.y && ball.y <= p1.y + settings.paddleHeight
+        ) {
+            ball.x = settings.paddleWidth // Snap to paddle face to prevent getting stuck
+            ballVelocityX *= -settings.ballSpeed // Reverse direction and increase speed
             logger.debug("-- Ball collided with player 1 paddle.")
         }
-
-        // Player 2 paddle collision
-        if (ball.x >= settings.gameWidth - settings.paddleWidth - settings.ballSize && ball.y + settings.ballSize >= p2.y && ball.y <= p2.y + settings.paddleHeight) {
-            ball.x = settings.gameWidth - settings.paddleWidth - settings.ballSize // prevent ball from getting stuck
-            ballVelocityX *= -1.05 // Invert and increase speed
+        // Check for collision with Player 2 (right paddle)
+        // A collision occurs if the ball is moving right, its right edge has crossed
+        // the paddle's left edge, and it vertically aligns with the paddle.
+        else if (ballVelocityX > 0 &&
+            ball.x + settings.ballSize >= settings.gameWidth - settings.paddleWidth &&
+            ball.y + settings.ballSize >= p2.y && ball.y <= p2.y + settings.paddleHeight
+        ) {
+            ball.x = settings.gameWidth - settings.paddleWidth - settings.ballSize // Snap to paddle face
+            ballVelocityX *= -settings.ballSpeed // Reverse direction and increase speed
             logger.debug("-- Ball collided with player 2 paddle.")
+            logger.debug("   paddle size: ${settings.paddleHeight}")
+            logger.debug("   p2.y: ${p2.y}")
+            logger.debug("   p2.y + settings.paddleHeight: ${p2.y + settings.paddleHeight}")
+            logger.debug("   ball size: ${settings.ballSize}")
+            logger.debug("   ball.y: ${ball.y}")
+            logger.debug("   ball.y + settings.ballSize: ${ball.y + settings.ballSize}")
         }
 
 
@@ -146,7 +162,7 @@ class GameService(private val objectMapper: ObjectMapper) {
             gameState.score.player2++
             logger.info("Player 2 scored! Score is now ${gameState.score.player1} - ${gameState.score.player2}")
             resetBall()
-        } else if (ball.x >= settings.gameWidth) {
+        } else if (ball.x + settings.ballSize >= settings.gameWidth) {
             gameState.score.player1++
             logger.info("Player 1 scored! Score is now ${gameState.score.player1} - ${gameState.score.player2}")
             resetBall()
@@ -163,8 +179,8 @@ class GameService(private val objectMapper: ObjectMapper) {
         if (Random.nextBoolean()) {
             angle += Math.PI
         }
-        ballVelocityX = 5.0 * cos(angle)
-        ballVelocityY = 5.0 * sin(angle)
+        ballVelocityX = 2.0 * cos(angle)
+        ballVelocityY = 2.0 * sin(angle)
         logger.info("Ball reset to center with new velocity.")
     }
 
