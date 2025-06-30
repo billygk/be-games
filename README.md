@@ -44,3 +44,10 @@ Sent once immediately after a client successfully connects. It tells the client 
 ## Front end client
 
 https://github.com/billygk/fe-games
+
+
+### Start Server
+
+```
+mvn spring-boot:run
+```
