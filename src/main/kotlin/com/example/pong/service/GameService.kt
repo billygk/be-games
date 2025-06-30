@@ -29,7 +29,7 @@ class GameService(private val objectMapper: ObjectMapper) {
         ballInitialSpeed = 2.5,
         ballSpeedIncreaseFactor = 1.15,
         initialPlayer1 = Paddle( 30.0,  300.0),
-        initialPlayer2 = Paddle(770.0, 300.0),
+        initialPlayer2 = Paddle(755.0, 300.0), // Corrected position: 800 (width) - 15 (paddle) - 30 (margin) = 755
         initialBall = Ball(400.0, 300.0)
     )
     // Thread-safe state management
@@ -107,7 +107,6 @@ class GameService(private val objectMapper: ObjectMapper) {
     @Scheduled(fixedRate = 16)
     fun gameLoop() {
         if (!gameRunning) {
-            // Don't run the game loop if not enough players are connected or game is paused.
             return
         }
 
@@ -126,54 +125,38 @@ class GameService(private val objectMapper: ObjectMapper) {
             logger.debug("Ball collided with top/bottom wall.")
         }
 
-        /*
-            Axis-Aligned Bounding Box (AABB) intersection test.
-            This method checks for a true geometric overlap between
-            the rectangles of the ball and the paddle.
-         */
-
         val ball = gameState.ball
         val ballLeft = ball.x
         val ballRight = ball.x + settings.ballSize
         val ballTop = ball.y
         val ballBottom = ball.y + settings.ballSize
 
-        // Check for collision with Player 1 (left paddle)
-        if (ballVelocityX < 0) {
-            val p1 = gameState.player1
-            val paddleLeft = p1.x
-            val paddleRight = p1.x + settings.paddleWidth
-            val paddleTop = p1.y
-            val paddleBottom = p1.y + settings.paddleHeight
+        // Determine which paddle to check for collision based on ball's direction
+        val paddleToCheck = if (ballVelocityX < 0) gameState.player1 else gameState.player2
 
+        val paddleLeft = paddleToCheck.x
+        val paddleRight = paddleToCheck.x + settings.paddleWidth
+        val paddleTop = paddleToCheck.y
+        val paddleBottom = paddleToCheck.y + settings.paddleHeight
 
-            // AABB intersection test
-            if (ballRight > paddleLeft && ballLeft < paddleRight && ballBottom > paddleTop && ballTop < paddleBottom) {
-                ball.x = settings.paddleWidth // Snap to paddle face to prevent getting stuck
-                ballVelocityX *= -settings.ballSpeedIncreaseFactor // Reverse direction and increase speed
+        // AABB intersection test
+        if (ballRight > paddleLeft && ballLeft < paddleRight && ballBottom > paddleTop && ballTop < paddleBottom) {
+
+            // *** FIXED: Correct snapping logic ***
+            if (ballVelocityX < 0) { // Hitting left paddle
+                ball.x = paddleRight
                 logger.debug("-- Ball collided with player 1 paddle.")
-            }
-
-        }
-
-        // Check for collision with Player 2 (right paddle)
-        else if (ballVelocityX > 0) {
-            val p2 = gameState.player2
-            val paddleLeft = p2.x
-            val paddleRight = p2.x + settings.paddleWidth
-            val paddleTop = p2.y
-            val paddleBottom = p2.y + settings.paddleHeight
-
-            // AABB intersection test
-            if (ballRight > paddleLeft && ballLeft < paddleRight && ballBottom > paddleTop && ballTop < paddleBottom) {
-                ball.x = settings.gameWidth - settings.paddleWidth - settings.ballSize // Snap to paddle face
-                ballVelocityX *= -settings.ballSpeedIncreaseFactor // Reverse direction and increase speed
+            } else { // Hitting right paddle
+                ball.x = paddleLeft - settings.ballSize
                 logger.debug("-- Ball collided with player 2 paddle.")
             }
+
+            ballVelocityX *= -settings.ballSpeedIncreaseFactor // Reverse direction and increase speed
         }
 
+
         // Score detection
-        if (ball.x < 0) { // using < to avoid conflict with paddle at x=0
+        if (ball.x < 0) {
             gameState.score.player2++
             logger.info("Player 2 scored! Score is now ${gameState.score.player1} - ${gameState.score.player2}")
             resetBall()
@@ -185,12 +168,10 @@ class GameService(private val objectMapper: ObjectMapper) {
     }
 
     private fun resetBall() {
-        gameState.ball.x = settings.gameWidth / 2
-        gameState.ball.y = settings.gameHeight / 2
+        gameState.ball.x = settings.initialBall.x
+        gameState.ball.y = settings.initialBall.y
 
-        // Give the ball a new random direction
         var angle = Random.nextDouble(-Math.PI / 4, Math.PI / 4)
-        // Send it towards a random player
         if (Random.nextBoolean()) {
             angle += Math.PI
         }
@@ -205,13 +186,14 @@ class GameService(private val objectMapper: ObjectMapper) {
         gameState.score.player1 = 0
         gameState.score.player2 = 0
 
+        // *** FIXED: Reset paddles to initial positions from settings ***
         val p1 = gameState.player1
-        p1.x = 0.0
-        p1.y = settings.gameHeight / 2 - settings.paddleHeight / 2
+        p1.x = settings.initialPlayer1.x
+        p1.y = settings.initialPlayer1.y
 
         val p2 = gameState.player2
-        p2.x = settings.gameWidth - settings.paddleWidth
-        p2.y = settings.gameHeight / 2 - settings.paddleHeight / 2
+        p2.x = settings.initialPlayer2.x
+        p2.y = settings.initialPlayer2.y
 
         resetBall()
     }
@@ -229,7 +211,6 @@ class GameService(private val objectMapper: ObjectMapper) {
 
     private fun broadcast(message: ServerMessage) {
         val jsonMessage = objectMapper.writeValueAsString(message)
-        logger.trace("Broadcasting game state: {}", jsonMessage)
         players.values.forEach { session ->
             sendMessage(session, jsonMessage)
         }
@@ -248,12 +229,10 @@ class GameService(private val objectMapper: ObjectMapper) {
             }
         } catch (e: IOException) {
             logger.error("Error sending message to session ${session.id}: ${e.message}", e)
-            // The connection is likely broken, so we should remove the player.
             removePlayer(session)
         }
     }
 
-    // Private data class to hold the mutable state internally
     private data class GameState(
         val ball: Ball,
         val player1: Paddle,
